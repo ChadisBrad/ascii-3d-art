@@ -1,0 +1,65 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ascii 3d art</title>
+<style>
+  html, body { margin: 0; background: #000; color: #9b93a8; font: 13px ui-monospace, Menlo, Consolas, monospace; }
+  main { display: grid; justify-items: center; gap: 10px; padding: 12px; }
+  canvas { width: min(96vw, 540px); height: auto; image-rendering: auto; }
+  nav { display: flex; gap: 8px; }
+  button { font: inherit; color: #ffd3df; background: #1a1220; border: 1px solid #4a3050; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  button[aria-pressed="true"] { background: #4a1630; }
+  p { margin: 0; }
+</style>
+<main>
+  <nav><button data-s="rose" aria-pressed="true">rose</button><button data-s="ring">diamond ring</button></nav>
+  <canvas id="cv"></canvas>
+  <p id="hud"></p>
+  <p>the method: JIN2 (@jin_22ee). this code: written for the ascii-3d-art skill.</p>
+</main>
+<script type="module">
+  import { createRenderer, grid } from "./ascii3d.js";
+  import { roseScene, ringScene } from "./shapes.js";
+
+  // the grid: cells 9 by 14 px, about 120 by 69 of them, like a 1080 by 960 window at half size
+  const params = new URLSearchParams(location.search);
+  const COLS = Number(params.get("cols") || 120), ROWS = Number(params.get("rows") || 69), CW = 9, CH = 14;
+  const ASPECT = (COLS * CW) / (ROWS * CH);
+  const dpr = Math.min(2, devicePixelRatio || 1);
+  const cv = document.getElementById("cv"), hud = document.getElementById("hud");
+  const g = grid(COLS, ROWS);
+  let scene, renderer, t0 = performance.now();
+  function use(name) {
+    scene = name === "ring" ? ringScene() : roseScene();
+    renderer = createRenderer(cv, { cols: COLS, rows: ROWS, cellW: CW, cellH: CH, palette: scene.palette, dpr, trail: 0.5, glow: 0.55 });
+    t0 = performance.now();
+    document.querySelectorAll("nav button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.s === name)));
+  }
+  document.querySelector("nav").addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) use(b.dataset.s); });
+  use(params.get("scene") || "rose");
+
+  // a hook for headless checks: window.__ascii.at(t) draws the frame for time t and stops the clock
+  let frozen = -1;
+  window.__ascii = { at(t) { frozen = t; draw(t); return true; }, play() { frozen = -1; } };
+  // ?t=12 holds the frame at 12 s, after drawing the second before it so trails and particles build up
+  if (params.has("t")) {
+    const t = Math.max(0, Number(params.get("t")) || 0);
+    for (let s = Math.max(0, t - 1); s < t; s += 1 / 30) draw(s);
+    window.__ascii.at(t);
+  }
+  let last = 0;
+  function draw(t) {
+    const a = performance.now();
+    const info = scene.step(t, g, { cols: COLS, rows: ROWS, aspect: ASPECT });
+    renderer.draw(g);
+    const ms = performance.now() - a;
+    hud.textContent = `${scene.title}  t ${t.toFixed(1)} s  ${ms.toFixed(1)} ms a frame  ${Object.entries(info).map(([k, v]) => `${k} ${(+v).toFixed(2)}`).join("  ")}`;
+  }
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (frozen >= 0 || now - last < 33) return;
+    last = now;
+    draw(((now - t0) / 1000) % scene.length);
+  }
+  requestAnimationFrame(frame);
+</script>
